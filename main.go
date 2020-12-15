@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
+	"github.com/sajari/regression"
 	"github.com/tealeg/xlsx"
 )
 
@@ -10,6 +12,10 @@ var (
 	nameTable = "./presidentUSA.xlsx"
 	sheetName = "list"
 	ageInCell = 5
+
+	setNum = func(n int) string {
+		return "(Возраст -" + strconv.Itoa(n) + " президента)"
+	}
 )
 
 func main() {
@@ -17,7 +23,7 @@ func main() {
 		x       []float64
 		buf     float64
 		predict float64
-		p       int
+		deep    int = 2
 	)
 
 	wb, _ := xlsx.OpenFile(nameTable)
@@ -32,16 +38,55 @@ func main() {
 		x = append(x, buf)
 	}
 
-	for p = 2; p <= len(x)/2; p++ {
-		predict = 0
-		_, a := lineFactors(x, len(x), p)
+	// for p = 2; p <= len(x)/2; p++ {
+	// 	predict = 0
+	// 	_, a := lineFactors(x, len(x), p)
 
-		for i := 0; i < len(a); i++ {
-			predict += a[i] * x[len(x)-len(a)+i]
-		}
-		fmt.Printf("предполагаемый возраст по предыдущим %d президентам: %.2f\n",
-			p, predict)
+	// 	for i := 0; i < len(a); i++ {
+	// 		predict += a[i] * x[len(x)-len(a)+i]
+	// 	}
+	// 	fmt.Printf("предполагаемый возраст по предыдущим %d президентам: %.2f\n",
+	// 		p, predict)
+	// }
+
+	fmt.Println("deep?")
+	fmt.Scan(&deep)
+	if deep < 2 {
+		deep = 2
+		fmt.Println("min deep = 2")
 	}
+
+	r := new(regression.Regression)
+	r.SetObserved("Возраст нового президента")
+
+	for i := 0; i < deep; i++ {
+		r.SetVar(i, setNum(i+1))
+	}
+
+	for i := 0; i < len(x)-deep; i++ {
+		tr := make([]float64, deep)
+		for j := 0; j < deep; j++ {
+			tr[j] = x[i+j]
+		}
+		r.Train(
+			regression.DataPoint(x[i+deep], tr),
+		)
+	}
+	r.Run()
+
+	fmt.Println("Полученные кофициенты:")
+	fmt.Printf("Свободный коэфициент = %.10f\n", r.GetCoeffs()[0])
+	for i := 1; i <= deep; i++ {
+		fmt.Printf("%d коэфициент = %.10f\n", i, r.GetCoeffs()[i])
+	}
+	fmt.Printf("\n\n")
+
+	tr := make([]float64, deep)
+	for j := 0; j < deep; j++ {
+		tr[j] = x[len(x)-j-1]
+	}
+	predict, _ = r.Predict(tr)
+	fmt.Println("Предсказанный возраст: ", predict)
 }
 
 func lineFactors(x []float64, N int, p int) (E float64, a []float64) {
